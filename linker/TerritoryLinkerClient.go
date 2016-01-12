@@ -41,6 +41,10 @@ func (linkerdata *LinkerData) GetPacket() (packetIn []Packet) {
 	return
 }
 
+func (LinkerData *LinkerData) IsConnected() bool{
+	return LinkerData.isConnected
+}
+
 func (linkerdata *LinkerData) SendPacket(packet Packet) {
 	linkerdata.packetOut <- packet
 }

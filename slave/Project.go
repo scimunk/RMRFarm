@@ -13,6 +13,7 @@ import (
 	"github.com/epixerion/RMRFarm/logger"
 	"io/ioutil"
 	"os/exec"
+	"strconv"
 )
 
 const (
@@ -30,16 +31,20 @@ type projectData struct {
 }
 
 func newProject(data *PacketNewProject, client linker.Client) *projectData {
-	mainLog.SetColor("\x1b[32m").LogMsg(logger.LOG_INFO, "PROJECT", "STARTING NEW PROJECT")
+	mainLog.SetColor(logger.COLOR_GREEN).LogMsg(logger.LOG_INFO, "PROJECT", "STARTING NEW PROJECT")
 	projectData := &projectData{}
 	projectData.projectName = data.ProjectName
 	projectData.fileList = data.FileData
 	projectData.mainClient = data.Client
 	projectData.client = client
 	projectData.DecompressProjectDataFile(data.Filepath)
-	projectData.checkAndRequestRequiredFile()
-	os.MkdirAll(filepath.Join(rmrfarm.conf.Workspace, "/renderman/", projectData.projectName, "images"), os.ModePerm)
 	return projectData
+}
+
+func (pd *projectData) generateProject(){
+
+	pd.checkAndRequestRequiredFile()
+	os.MkdirAll(filepath.Join(rmrfarm.conf.Workspace, "/renderman/", pd.projectName, "images"), os.ModePerm)
 }
 
 func (pd *projectData) DecompressProjectDataFile(largefilepath string) {
@@ -69,20 +74,19 @@ func (pd *projectData) DecompressProjectDataFile(largefilepath string) {
 
 func (pd *projectData) changeState(state int8) {
 	pd.state = state
-	//rmrfarm.masterHandler.linker.SendPacket(&packetSlaveInfo{})
-}
-
-func (pd *projectData) updateProject() {
 	if pd.state == STATE_READY {
-		pd.MakeCurrentPCCompatibleRIB()
-		pd.state = STATE_RENDERING
-		go pd.startRender()
+		rmrfarm.projectManager.UpdateSlaveReadyness()
 	}
 }
 
-func (pd *projectData) startRender() {
-	mainLog.SetColor("\x1b[1m\x1b[5m\x1b[31m").LogMsg(logger.LOG_INFO,"RENDER","STARTING RENDERING !")
-	cmd := exec.Command("prman","-Progress",  "-cwd", rmrfarm.conf.Workspace, filepath.Join("renderman",pd.projectName,"/rib/0003/perspShape_Final.0003.rib"))
+func (pd *projectData) updateProject() {
+
+}
+
+func (pd *projectData) startRender(camera string, frameId int32) {
+	mainLog.SetColor(logger.TEXT_BLINK, logger.TEXT_BOLD,logger.COLOR_RED).LogMsg(logger.LOG_INFO,"RENDER","STARTING RENDERING !")
+	cmd := exec.Command("prman","-Progress",  "-cwd", rmrfarm.conf.Workspace,
+		filepath.Join("renderman",pd.projectName,"/rib/000" + strconv.Itoa(int(frameId))+ "/"+camera + "Shape_Final.000"+strconv.Itoa(int(frameId))+".rib"))
 	stdout, err := cmd.StdoutPipe()
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
@@ -105,21 +109,22 @@ func reader(io io.ReadCloser) {
 		if err != nil {
 			break
 		}
-		mainLog.SetColor("\x1b[34m").LogMsg(logger.LOG_INFO, "RENDER", string(str))
+		mainLog.SetColor(logger.COLOR_BLUE).LogMsg(logger.LOG_INFO, "RENDER", string(str))
 	}
 }
 
 func (pd *projectData) checkAndRequestRequiredFile() {
-	mainLog.SetColor("\x1b[32m").LogMsg(logger.LOG_INFO, "PROJECT", "CHECKING REQUIRED FILES")
+	mainLog.SetColor(logger.COLOR_GREEN).LogMsg(logger.LOG_INFO, "PROJECT", "CHECKING REQUIRED FILES")
 	fileData := pd.checkRequiredFile()
 	if len(fileData) > 0 {
 		for _, f := range fileData{
-			mainLog.SetColor("\x1b[32m").LogMsg(logger.LOG_INFO, "PROJECT", filepath.Join(f.Path, f.File), "NOT EXISTING, ADDING TO REQUEST")
+			mainLog.SetColor(logger.COLOR_GREEN).LogMsg(logger.LOG_INFO, "PROJECT", filepath.Join(f.Path, f.File), "NOT EXISTING, ADDING TO REQUEST")
 		}
 		pd.client.GetConn().SendPacket(&PacketRequestFile{PacketData{PACKET_REQUESTFILE, pd.mainClient}, fileData})
 	} else {
-		mainLog.SetColor("\x1b[32m").LogMsg(logger.LOG_INFO, "PROJECT", "EVERY FILE HAVE BEEN RECEIVED")
+		mainLog.SetColor(logger.COLOR_GREEN).LogMsg(logger.LOG_INFO, "PROJECT", "EVERY FILE HAVE BEEN RECEIVED")
 		pd.changeState(STATE_READY)
+		pd.MakeCurrentPCCompatibleRIB()
 	}
 }
 
@@ -127,7 +132,7 @@ func (pd *projectData) checkRequiredFile() []FileData {
 	var fileToRequest []FileData
 	for _, file := range pd.fileList {
 		if _, err := os.Stat(filepath.Join(rmrfarm.conf.Workspace, strings.Replace(file.Path, ":", "_", -1), file.File)); os.IsNotExist(err) {
-			mainLog.SetColor("\x1b[32m").LogMsg(logger.LOG_INFO, "PROJECT", "Required file check :", file.File)
+			mainLog.SetColor(logger.COLOR_GREEN).LogMsg(logger.LOG_INFO, "PROJECT", "Required file check :", file.File)
 			fileToRequest = append(fileToRequest, file)
 		}
 	}
@@ -137,17 +142,18 @@ func (pd *projectData) checkRequiredFile() []FileData {
 func (pd *projectData) HandleSendFile(packet *PacketSendFile) {
 	err := os.MkdirAll(filepath.Join(rmrfarm.conf.Workspace, strings.Replace(packet.Path, ":", "_", -1)), os.ModePerm)
 	if err != nil {
-		mainLog.SetColor("\x1b[31m").LogErr(logger.LOG_INFO, "PROJECT", "Could'nt not create directory :", err)
+		mainLog.SetColor(logger.COLOR_RED).LogErr(logger.LOG_INFO, "PROJECT", "Could'nt not create directory :", err)
 	}
 	err = os.Rename(packet.Filepath, filepath.Join(rmrfarm.conf.Workspace, strings.Replace(packet.Path, ":", "_", -1), packet.FileName))
 	if err != nil {
-		mainLog.SetColor("\x1b[31m").LogErr(logger.LOG_INFO, "PROJECT", "Couldn't Move Temp File", err)
+		mainLog.SetColor(logger.COLOR_RED).LogErr(logger.LOG_INFO, "PROJECT", "Couldn't Move Temp File", err)
 	}
-	mainLog.SetColor("\x1b[32m").LogMsg(logger.LOG_INFO, "PROJECT", "FILE ",filepath.Join(rmrfarm.conf.Workspace, strings.Replace(packet.Path, ":", "_", -1), packet.FileName), "Have Been Received")
+	mainLog.SetColor(logger.COLOR_GREEN).LogMsg(logger.LOG_INFO, "PROJECT", "FILE ",filepath.Join(rmrfarm.conf.Workspace, strings.Replace(packet.Path, ":", "_", -1), packet.FileName), "Have Been Received")
 	fileData := pd.checkRequiredFile()
 	if len(fileData) == 0 {
-		mainLog.SetColor("\x1b[32m").LogMsg(logger.LOG_INFO, "PROJECT", "EVERY FILE HAVE BEEN RECEIVED")
+		mainLog.SetColor(logger.COLOR_GREEN).LogMsg(logger.LOG_INFO, "PROJECT", "EVERY FILE HAVE BEEN RECEIVED")
 		pd.changeState(STATE_READY)
+		pd.MakeCurrentPCCompatibleRIB()
 	}
 }
 
@@ -161,7 +167,7 @@ func  (pd *projectData) replaceAbsPath(path string, info os.FileInfo, err error)
 	if !strings.Contains(filename, ".rib"){
 		return nil
 	}
-	mainLog.SetColor("\x1b[32m").LogMsg(logger.LOG_INFO, "PROJECT", "Will convert rib for local path", path)
+	mainLog.SetColor(logger.COLOR_GREEN).LogMsg(logger.LOG_INFO, "PROJECT", "Will convert rib for local path", path)
 
 	input, _ := ioutil.ReadFile(path)
 	lines := strings.Split(string(input), "\n")

@@ -10,16 +10,19 @@ import (
 
 type slaveData struct {
 	id             int8
+	ip string
 	linker         *LinkerData
 	slaveName      string
 	available      bool
 	project        *projectData
 	workingOnFrame int32
+	projectReady []string
 }
 
 func StartSlave(ip string) *slaveData {
 	slaveData := &slaveData{}
 	slaveData.linker = StartClientLinker(ip)
+	slaveData.ip = ip
 	slaveData.linker.SetLogger(mainLog)
 	return slaveData
 }
@@ -32,6 +35,8 @@ func (slave *slaveData) UpdateSlave() {
 			slave.readSlaveData(ReadPacketSlaveInfo(packet))
 		case PACKET_REQUESTFILE:
 			slave.handleSlaveFileRequest(ReadPacketRequestFile(packet))
+		case PACKET_SLAVEREADY:
+			slave.handleSlaveReady(ReadPacketSlaveReady(packet))
 		}
 	}
 }
@@ -40,11 +45,9 @@ func (slave *slaveData) AssignSlaveToProject(project *projectData) {
 	slave.project = project
 	packet := &PacketNewProject{}
 	packet.PacketId = PACKET_NEWPROJECT
-	packet.Filepath = filepath.Join(rmrfarm.conf.MayaWorkspace, "RMRFarm", project.projectName+".zip")
-
-	packet.FileData = project.fileData
-	packet.ProjectName = project.projectName
-	packet.Camera = "nil"
+	packet.Filepath = filepath.Join(rmrfarm.conf.MayaWorkspace, "RMRFarm", project.ProjectName +".zip")
+	packet.FileData = project.FileData
+	packet.ProjectName = project.ProjectName
 	slave.SendPacket(packet)
 }
 
@@ -68,38 +71,31 @@ func (slave *slaveData) handleSlaveFileRequest(packet *PacketRequestFile) {
 	}
 }
 
+func (slave *slaveData) handleSlaveReady(packet *PacketSlaveReady) {
+	mainLog.LogMsg(logger.LOG_INFO, "PROJECT", "Received Slave Readyness")
+	slave.projectReady = packet.ProjectName
+	slave.available = packet.Availlable
+}
+
 func (slave *slaveData) SendPacket(packet Packet) {
 	slave.linker.SendPacket(packet)
 }
 
-func (slave *slaveData) SendFile(filepath string) {
-	/*folders, _ := ioutil.ReadDir(filepath.Join('./renderman/', NOMPROJECT))
+func (slave *slaveData) StartRenderFrame(projectName string, cameraName string, frameId int32){
+	slave.linker.SendPacket(&PacketRenderFrame{PacketData{PACKET_RENDERFRAME, nil}, projectName, cameraName, frameId})
+}
 
-	regex, _ := regexp.Compile("/\"(.*?)\"/g")
-	workingdir, _ := os.Getwd()
-
-	for _, dir := range folders {
-		if dir.IsDir() && string.hasPrefix(dir.Name(), 'frame') {
-		files, _ := ioutil.ReadDir(filepath.Join('./renderman/', NOMPROJECT, dir.Name()))
-
-		for _, doc := range files {
-		if !strings.HasSuffix(doc.Name(), ".rib")
-		continue
-		content, _ := ioutil.ReadFile(filepath.Join('./renderman/', NOMPROJECT, dir.Name(), doc.Name()))
-
-
-		for quoted := regex.FindAllString(string(content[:]), -1) {
-		if strings.Index(quoted, "/") != -1 && strings.Index(quoted, "@") == -1 && strings.Index(quoted, ":") == -1  {
-		if !strings.HasSuffix(quoted, "/") {
-		if path.IsAbs(quoted) {
-		rel := filepath.Rel(workingdir, quoted)
-		} else {
-		abs := path.Abs(quoted)
-		}
-		}
-		}
-		}
-		}
-		}
-	}*/
+func (slave *slaveData) printSlaveInfo(){
+	str := ""
+	if slave.slaveName == ""{
+		str += slave.ip
+	}else{
+		str += slave.slaveName
+	}
+	if (slave.linker.IsConnected()) {
+		mainLog.SetColor(logger.COLOR_GREEN).LogMsg(logger.LOG_INFO, "SLAVE", str + " Is Connected")
+	}
+	if (!slave.linker.IsConnected()) {
+		mainLog.SetColor(logger.COLOR_RED).LogMsg(logger.LOG_INFO, "SLAVE", str + " Is Not Connected")
+	}
 }

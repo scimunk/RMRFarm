@@ -9,6 +9,8 @@ const (
 	PACKET_NEWPROJECT
 	PACKET_REQUESTFILE
 	PACKET_SENDFILE
+	PACKET_SLAVEREADY
+	PACKET_RENDERFRAME
 )
 
 /*
@@ -68,7 +70,6 @@ func (p *PacketSlaveInfo) GetBytes() []byte {
 type PacketNewProject struct {
 	LargePacketData
 	ProjectName string
-	Camera      string
 	FileData    []FileData
 }
 
@@ -79,7 +80,6 @@ func ReadPacketNewProject(p linker.LargePacket) *PacketNewProject {
 	newpacket.PacketId = p.GetId()
 
 	newpacket.ProjectName = reader.ReadUtfString()
-	newpacket.Camera = reader.ReadUtfString()
 	len := reader.ReadInt8()
 	for i := int8(0); i < len; i++ {
 		fileD := FileData{}
@@ -94,7 +94,6 @@ func ReadPacketNewProject(p linker.LargePacket) *PacketNewProject {
 func (p *PacketNewProject) GetBytes() []byte {
 	writer := CreateBinaryWriter()
 	writer.WriteUtfString(p.ProjectName)
-	writer.WriteUtfString(p.Camera)
 	writer.WriteInt8(byte(len(p.FileData)))
 	for _, file := range p.FileData {
 		writer.WriteUtfString(file.File)
@@ -161,5 +160,57 @@ func (p *PacketSendFile) GetBytes() []byte {
 	writer := CreateBinaryWriter()
 	writer.WriteUtfString(p.Path)
 	writer.WriteUtfString(p.FileName)
+	return writer.Bytes()
+}
+
+
+/*
+	Packet Slave Ready
+*/
+type PacketSlaveReady struct {
+	PacketData
+	ProjectName []string
+	Availlable bool
+}
+
+func ReadPacketSlaveReady(packet linker.Packet) *PacketSlaveReady {
+	reader := CreateBinaryReader(packet.GetBytes())
+	newpacket := &PacketSlaveReady{PacketData: readBasePacket(packet)}
+	newpacket.Availlable = reader.ReadBool()
+	newpacket.ProjectName = reader.ReadUtfStringArray()
+	return newpacket
+}
+
+func (p *PacketSlaveReady) GetBytes() []byte {
+	writer := CreateBinaryWriter()
+	writer.WriteBool(p.Availlable)
+	writer.WriteUtfStringArray(p.ProjectName)
+	return writer.Bytes()
+}
+
+/*
+	Packet RenderFrame
+*/
+type PacketRenderFrame struct {
+	PacketData
+	ProjectName string
+	Camera string
+	FrameId int32
+}
+
+func ReadPacketRenderFrame(packet linker.Packet) *PacketRenderFrame {
+	reader := CreateBinaryReader(packet.GetBytes())
+	newpacket := &PacketRenderFrame{PacketData: readBasePacket(packet)}
+	newpacket.ProjectName = reader.ReadUtfString()
+	newpacket.Camera = reader.ReadUtfString()
+	newpacket.FrameId = reader.ReadInt32()
+	return newpacket
+}
+
+func (p *PacketRenderFrame) GetBytes() []byte {
+	writer := CreateBinaryWriter()
+	writer.WriteUtfString(p.ProjectName)
+	writer.WriteUtfString(p.Camera)
+	writer.WriteInt32(p.FrameId)
 	return writer.Bytes()
 }

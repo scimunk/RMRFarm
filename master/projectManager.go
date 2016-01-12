@@ -8,21 +8,32 @@ import (
 )
 
 type projectManager struct {
-	projectList []*projectData `yaml:"projectList"`
+	ProjectList []*projectData `yaml:"projectList"`
 }
 
 func startProjectManager() *projectManager {
 	projectManager := &projectManager{}
+	file, err := ioutil.ReadFile("project.cfg")
+	if err != nil {
+	}
+	yaml.Unmarshal(file, &projectManager)
 	return projectManager
+}
+
+func (pm *projectManager) updateProjectManager(){
+	for _, project := range pm.ProjectList{
+		project.updateProject()
+	}
 }
 
 func (pm *projectManager) newProjectId(id int) {
 	if len(pm.getAvaillableProject()) > id {
 		projectName := pm.getAvaillableProject()[id]
 		project := newProject(projectName)
-		pm.projectList = append(pm.projectList, project)
+		pm.ProjectList = append(pm.ProjectList, project)
+		pm.saveProject()
 	} else {
-		mainLog.SetColor("\x1b[31m").LogWarn(1, "PROJECT", "project id", id, "do not exist")
+		mainLog.SetColor(logger.COLOR_RED).LogWarn(1, "PROJECT", "project id", id, "do not exist")
 	}
 }
 
@@ -37,10 +48,18 @@ func (pm *projectManager) getAvaillableProject() []string {
 	return project
 }
 
+func (pm *projectManager) getGeneratedProject() []string{
+	str := []string{}
+	for _, p := range pm.ProjectList{
+		str = append(str, p.ProjectName)
+	}
+	return str
+}
+
 func (pm *projectManager) saveProject() {
-	mainLog.SetColor("\x1b[32m").LogMsg(logger.LOG_INFO, "PROJECTMANAGER", "SAVING PROJECT DATA")
+	mainLog.SetColor(logger.COLOR_GREEN).LogMsg(logger.LOG_INFO, "PROJECTMANAGER", "SAVING PROJECT DATA")
 	data, err := yaml.Marshal(pm)
 	ioutil.WriteFile("project.cfg", data, 0644)
 	check(err)
-	mainLog.SetColor("\x1b[32m").LogMsg(logger.LOG_INFO, "PROJECTMANAGER", "SAVED!")
+	mainLog.SetColor(logger.COLOR_GREEN).LogMsg(logger.LOG_INFO, "PROJECTMANAGER", "SAVED!")
 }

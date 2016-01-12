@@ -24,6 +24,8 @@ func (mh *masterHandler) updateMasterHandler() {
 			rmrfarm.projectManager.startProject(ReadPacketNewProject(packet.(LargePacket)), packet.GetClient())
 		case PACKET_SENDFILE:
 			rmrfarm.projectManager.currentProject.HandleSendFile(ReadPacketSendFile(packet.(LargePacket)))
+		case PACKET_RENDERFRAME:
+			rmrfarm.projectManager.renderFrame(ReadPacketRenderFrame(packet))
 		}
 	}
 	for _, clientState := range mh.linker.GetLastClientState() {

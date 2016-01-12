@@ -21,6 +21,7 @@ type Reader interface {
 	ReadDouble() float64
 	ReadBool() bool
 	ReadUtfString() string
+	ReadUtfStringArray() []string
 	ReadBytesArray() []byte
 	GetValue() []byte
 }
@@ -103,6 +104,15 @@ func (binaryreader *binaryreader) ReadUtfString() string {
 		str += string(char)
 	}
 	return str
+}
+
+func (binaryreader *binaryreader) ReadUtfStringArray() []string {
+	len := binaryreader.ReadInt32()
+	array := make([]string, len)
+	for i := int32(0); i < len; i++{
+		array[i] = binaryreader.ReadUtfString()
+	}
+	return array
 }
 
 func (binaryreader *binaryreader) ReadBytes(i int) []byte {

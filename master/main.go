@@ -44,6 +44,7 @@ func main() {
 	defer rmrfarm.projectManager.saveProject()
 	for exit {
 		rmrfarm.slaveManager.updateSlaveManager()
+		rmrfarm.projectManager.updateProjectManager()
 		time.Sleep(time.Second * 1)
 		//time.Sleep(time.Second * )
 	}

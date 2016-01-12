@@ -8,6 +8,6 @@ const (
 )
 
 type frame struct {
-	frameId int32
-	state   int8
+	frameId int32 `yaml:"frameId"`
+	state   int8 `yaml:"state"`
 }

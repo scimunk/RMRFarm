@@ -29,6 +29,17 @@ func (slaveM *slaveManager) updateSlaveManager() {
 	}
 }
 
+func (slaveM *slaveManager) getSlaveReadyForProject(projectName string) *slaveData{
+	for _, slave := range slaveM.slaveData {
+		for _, ready := range slave.projectReady{
+			if ready == projectName && slave.available{
+				return slave
+			}
+		}
+	}
+	return nil
+}
+
 func (slaveM *slaveManager) getAvaillableSlave() []*slaveData {
 	return slaveM.slaveData
 }

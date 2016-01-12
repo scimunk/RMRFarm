@@ -12,31 +12,64 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"strconv"
+)
+
+const (
+	PROJECT_STATE_IDLE = iota
+	PROJECT_STATE_RENDER
+	PROJECT_STATE_FINISHED
 )
 
 type projectData struct {
-	projectName   string        `yaml:"projectName"`
-	fileData      []FileData    `yaml:"fileList"`
-	frameManager  *frameManager `yaml:"frameManager"`
-	assignedSlave []string      `yaml:"assignedSlave"`
+	ProjectName   string        `yaml:"projectName"`
+	FileData      []FileData    `yaml:"fileList"`
+	FrameManager  *frameManager `yaml:"frameManager"`
+	AssignedSlave []string      `yaml:"assignedSlave"`
+	Camera []string `yaml:"CameraList"`
+	cameraToRender int
+	State int
 }
 
 func newProject(projectName string) *projectData {
-	projectData := &projectData{projectName: projectName}
-	projectData.frameManager = newFrameManager()
+	projectData := &projectData{ProjectName: projectName}
+	projectData.FrameManager = newFrameManager()
 	projectData.generateProject()
+	projectData.State = PROJECT_STATE_IDLE
 	return projectData
 }
 
-func (pd *projectData) addSlaveToProject(slaveName []string) {
-
+func (pd *projectData) updateProject(){
+	if pd.State == PROJECT_STATE_RENDER{
+		if slave := rmrfarm.slaveManager.getSlaveReadyForProject(pd.ProjectName); slave != nil{
+			if frame := pd.FrameManager.RenderFrame(); frame != nil {
+				mainLog.LogMsg(logger.LOG_INFO, "PROJECT", "Rendering frame", frame.frameId)
+				slave.StartRenderFrame(pd.ProjectName, pd.Camera[pd.cameraToRender], frame.frameId)
+			}else{
+				mainLog.LogMsg(logger.LOG_INFO, "PROJECT", "No Frame to Render")
+			}
+		}
+	}
 }
 
 func (pd *projectData) startRenderProject() {
-	rmrfarm.slaveManager.getAvaillableSlave()[0].AssignSlaveToProject(pd)
-	if len(pd.assignedSlave) < 0 {
+	for id, camera := range pd.Camera{
+		mainLog.LogMsg(logger.LOG_INFO, "PROJECT", id, ")", camera)
+	}
+	mainLog.LogMsg(logger.LOG_INFO, "PROJECT", "Select the camera you want to render :")
+	cmd := readCmd()
+	if id, err := strconv.Atoi(cmd[0]); id >= 0 && id < len(pd.Camera) && err == nil {
+		mainLog.LogMsg(logger.LOG_INFO, "PROJECT", "Starting Rendering of camera", pd.Camera[id])
+		pd.cameraToRender = id
+	}
+	for _, slave := range rmrfarm.slaveManager.getAvaillableSlave(){
+		slave.AssignSlaveToProject(pd)
+	}
+	if len(pd.AssignedSlave) < 0 {
 		mainLog.LogWarn(0, "PROJECT", "No slave assigned to this project, use project slave assign [id] to assign slave eg: project slave assign 5 1 3")
 		return
+	}else{
+		pd.State = PROJECT_STATE_RENDER
 	}
 
 }
@@ -44,25 +77,44 @@ func (pd *projectData) startRenderProject() {
 func (pd *projectData) generateProject() {
 	pd.compressProject()
 
-	mainLog.SetColor("\x1b[35m").LogMsg(logger.LOG_INFO, "PROJECT", "REGISTERING EXTERNAL ASSET")
-	folders, _ := ioutil.ReadDir(filepath.Join(rmrfarm.conf.MayaWorkspace, "/renderman/", pd.projectName))
+	mainLog.SetColor(logger.COLOR_MAGENTA).LogMsg(logger.LOG_INFO, "PROJECT", "REGISTERING EXTERNAL ASSET")
+	folders, _ := ioutil.ReadDir(filepath.Join(rmrfarm.conf.MayaWorkspace, "/renderman/", pd.ProjectName))
 	for _, dir := range folders {
 		if dir.IsDir() && strings.HasPrefix(dir.Name(), "rib") {
-			frames, _ := ioutil.ReadDir(filepath.Join(rmrfarm.conf.MayaWorkspace, "/renderman/", pd.projectName, dir.Name()))
+			frames, _ := ioutil.ReadDir(filepath.Join(rmrfarm.conf.MayaWorkspace, "/renderman/", pd.ProjectName, dir.Name()))
 			for _, frame := range frames {
-				files, _ := ioutil.ReadDir(filepath.Join(rmrfarm.conf.MayaWorkspace, "/renderman/", pd.projectName, dir.Name(), frame.Name()))
+				if id, err := strconv.Atoi(frame.Name()); err == nil && id != 0{
+					pd.FrameManager.addFrame(int32(id))
+				}
+				files, _ := ioutil.ReadDir(filepath.Join(rmrfarm.conf.MayaWorkspace, "/renderman/", pd.ProjectName, dir.Name(), frame.Name()))
 				for _, file := range files {
 					if !strings.HasSuffix(file.Name(), ".rib") {
 						continue
 					}
-					content, _ := ioutil.ReadFile(filepath.Join(rmrfarm.conf.MayaWorkspace, "/renderman/", pd.projectName, dir.Name(), frame.Name(), file.Name()))
+					if strings.Contains(file.Name(), "Shape"){
+						pd.addCamera(file.Name()[:strings.Index(file.Name(),"Shape")])
+					}
+					content, _ := ioutil.ReadFile(filepath.Join(rmrfarm.conf.MayaWorkspace, "/renderman/", pd.ProjectName, dir.Name(), frame.Name(), file.Name()))
 					pd.extractRibLink(string(content))
 				}
 			}
 		}
 	}
-	mainLog.SetColor("\x1b[35m").LogMsg(logger.LOG_INFO, "PROJECT", "REGISTERING COMPLETED")
-	mainLog.SetColor("\x1b[32m").LogMsg(logger.LOG_INFO, "PROJECT", "PROJECT", pd.projectName, "GENERATED WITH SUCCESS")
+	mainLog.SetColor(logger.COLOR_MAGENTA).LogMsg(logger.LOG_INFO, "PROJECT", "REGISTERING COMPLETED")
+	mainLog.SetColor(logger.COLOR_GREEN).LogMsg(logger.LOG_INFO, "PROJECT", "PROJECT", pd.ProjectName, "GENERATED WITH SUCCESS")
+}
+
+func (pd *projectData) addCamera(name string){
+	exist := false
+	for _, cam := range pd.Camera{
+		if cam == name{
+			exist = true
+		}
+	}
+	if !exist{
+		mainLog.SetColor(logger.COLOR_MAGENTA).LogMsg(logger.LOG_INFO, "PROJECT", "Added Camera", name)
+		pd.Camera = append(pd.Camera, name)
+	}
 }
 
 type microCompress struct {
@@ -70,10 +122,10 @@ type microCompress struct {
 }
 
 func (pd *projectData) compressProject() {
-	mainLog.SetColor("\x1b[35m").LogMsg(logger.LOG_INFO, "PROJECT", "START COMPRESSING PROJECT")
+	mainLog.SetColor(logger.COLOR_MAGENTA).LogMsg(logger.LOG_INFO, "PROJECT", "START COMPRESSING PROJECT")
 	err := os.MkdirAll(filepath.Join(rmrfarm.conf.MayaWorkspace, "RMRFarm"), os.ModePerm)
 
-	zipPath := filepath.Join(rmrfarm.conf.MayaWorkspace, "RMRFarm", pd.projectName+".zip")
+	zipPath := filepath.Join(rmrfarm.conf.MayaWorkspace, "RMRFarm", pd.ProjectName +".zip")
 	if f, _ := os.Stat(zipPath); f != nil {
 		os.Remove(zipPath)
 	}
@@ -82,13 +134,13 @@ func (pd *projectData) compressProject() {
 	mc := &microCompress{}
 
 	mc.writer = zip.NewWriter(zipfile)
-	filepath.Walk(filepath.Join(rmrfarm.conf.MayaWorkspace, "renderman", pd.projectName), mc.addToZip)
+	filepath.Walk(filepath.Join(rmrfarm.conf.MayaWorkspace, "renderman", pd.ProjectName), mc.addToZip)
 	err = mc.writer.Close()
 	zipfile.Close()
 	if err != nil {
 		mainLog.LogErr(logger.LOG_HIGH, "COMPRESS", "", err)
 	}
-	mainLog.SetColor("\x1b[35m").LogMsg(logger.LOG_INFO, "PROJECT", "COMPRESSION COMPLETED")
+	mainLog.SetColor(logger.COLOR_MAGENTA).LogMsg(logger.LOG_INFO, "PROJECT", "COMPRESSION COMPLETED")
 }
 
 func (mc *microCompress) addToZip(path string, info os.FileInfo, err error) error {
@@ -103,7 +155,7 @@ func (mc *microCompress) addToZip(path string, info os.FileInfo, err error) erro
 	if err != nil {
 		fmt.Println(err)
 	}
-	mainLog.SetColor("\x1b[34m").LogMsg(logger.LOG_INFO, "COMPRESS", "Compressing file", newpath)
+	mainLog.SetColor(logger.COLOR_BLUE).LogMsg(logger.LOG_INFO, "COMPRESS", "Compressing file", newpath)
 	f, _ := mc.writer.Create(newpath)
 	io.Copy(f, ftowrite)
 	ftowrite.Close()
@@ -112,7 +164,7 @@ func (mc *microCompress) addToZip(path string, info os.FileInfo, err error) erro
 
 func (pd *projectData) addUniqueLink(link FileData) {
 	exist := false
-	for _, existingcheck := range pd.fileData {
+	for _, existingcheck := range pd.FileData {
 		if existingcheck.File == link.File {
 			exist = true
 		}
@@ -127,8 +179,8 @@ func (pd *projectData) addUniqueLink(link FileData) {
 		if os.IsNotExist(err) {
 			return
 		}
-		pd.fileData = append(pd.fileData, link)
-		mainLog.SetColor("\x1b[34m").LogMsg(logger.LOG_INFO, "PROJECT", "Register file", link.Path+link.File, "for remote ressource")
+		pd.FileData = append(pd.FileData, link)
+		mainLog.SetColor(logger.COLOR_BLUE).LogMsg(logger.LOG_INFO, "PROJECT", "Register file", link.Path+link.File, "for remote ressource")
 	}
 }
 
