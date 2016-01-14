@@ -12,6 +12,7 @@ import (
 
 type config struct {
 	Workspace string `yaml:"Workspace"`
+	SlaveName string `yaml:"SlaveName"`
 	Ip        string `yaml:"IP"`
 }
 
@@ -30,7 +31,8 @@ func createConf() *config {
 	config := &config{}
 
 	config.Workspace = getInput("Define slave workspace path :", exists)
-	config.Ip = getInput("define server :", checkIp)
+	config.SlaveName = getInput("Define slave Name :", exists)
+	config.Ip = getInput("define Slave IP :", checkIp)
 
 	fmt.Println("Writing configuration")
 	f, err := os.Create("slaveConfig.cfg")

@@ -9,7 +9,6 @@ const (
 	PACKET_NEWPROJECT
 	PACKET_REQUESTFILE
 	PACKET_SENDFILE
-	PACKET_SLAVEREADY
 	PACKET_RENDERFRAME
 )
 
@@ -44,24 +43,34 @@ func (p *LargePacketData) GetFilePath() string {
 }
 
 /*
-	Packet Slave Info
+*	Packet SlaveState
 */
 type PacketSlaveInfo struct {
 	PacketData
 	SlaveName string
+	ProjectReady []string
+	Availlable bool
 }
 
 func ReadPacketSlaveInfo(p linker.Packet) *PacketSlaveInfo {
 	reader := CreateBinaryReader(p.GetBytes())
 	packet := &PacketSlaveInfo{}
 	packet.SlaveName = reader.ReadUtfString()
+	packet.ProjectReady = reader.ReadUtfStringArray()
+	packet.Availlable = reader.ReadBool()
 	return packet
 }
 
 func (p *PacketSlaveInfo) GetBytes() []byte {
 	writer := CreateBinaryWriter()
 	writer.WriteUtfString(p.SlaveName)
+	writer.WriteUtfStringArray(p.ProjectReady)
+	writer.WriteBool(p.Availlable)
 	return writer.Bytes()
+}
+
+func (p *PacketSlaveInfo) GetId() byte {
+	return PACKET_SLAVEINFO
 }
 
 /*
@@ -103,6 +112,10 @@ func (p *PacketNewProject) GetBytes() []byte {
 	return writer.Bytes()
 }
 
+func (p *PacketNewProject) GetId() byte {
+	return PACKET_NEWPROJECT
+}
+
 /*
 	Packet Request File
 */
@@ -136,6 +149,10 @@ func (p *PacketRequestFile) GetBytes() []byte {
 	return writer.Bytes()
 }
 
+func (p *PacketRequestFile) GetId() byte {
+	return PACKET_REQUESTFILE
+}
+
 /*
 	Packet SendFile
 */
@@ -143,6 +160,7 @@ type PacketSendFile struct {
 	LargePacketData
 	Path     string
 	FileName string
+	IsExterne bool
 }
 
 func ReadPacketSendFile(p linker.LargePacket) *PacketSendFile {
@@ -153,6 +171,7 @@ func ReadPacketSendFile(p linker.LargePacket) *PacketSendFile {
 
 	newpacket.Path = reader.ReadUtfString()
 	newpacket.FileName = reader.ReadUtfString()
+	newpacket.IsExterne = reader.ReadBool()
 	return newpacket
 }
 
@@ -160,32 +179,12 @@ func (p *PacketSendFile) GetBytes() []byte {
 	writer := CreateBinaryWriter()
 	writer.WriteUtfString(p.Path)
 	writer.WriteUtfString(p.FileName)
+	writer.WriteBool(p.IsExterne)
 	return writer.Bytes()
 }
 
-
-/*
-	Packet Slave Ready
-*/
-type PacketSlaveReady struct {
-	PacketData
-	ProjectName []string
-	Availlable bool
-}
-
-func ReadPacketSlaveReady(packet linker.Packet) *PacketSlaveReady {
-	reader := CreateBinaryReader(packet.GetBytes())
-	newpacket := &PacketSlaveReady{PacketData: readBasePacket(packet)}
-	newpacket.Availlable = reader.ReadBool()
-	newpacket.ProjectName = reader.ReadUtfStringArray()
-	return newpacket
-}
-
-func (p *PacketSlaveReady) GetBytes() []byte {
-	writer := CreateBinaryWriter()
-	writer.WriteBool(p.Availlable)
-	writer.WriteUtfStringArray(p.ProjectName)
-	return writer.Bytes()
+func (p *PacketSendFile) GetId() byte {
+	return PACKET_SENDFILE
 }
 
 /*
@@ -213,4 +212,8 @@ func (p *PacketRenderFrame) GetBytes() []byte {
 	writer.WriteUtfString(p.Camera)
 	writer.WriteInt32(p.FrameId)
 	return writer.Bytes()
+}
+
+func (p *PacketRenderFrame) GetId() byte {
+	return PACKET_RENDERFRAME
 }

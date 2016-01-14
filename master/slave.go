@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	. "github.com/epixerion/RMRFarm/rmrfarm"
 	. "github.com/epixerion/RMRFarm/linker"
 	"github.com/epixerion/RMRFarm/logger"
@@ -31,12 +30,9 @@ func (slave *slaveData) UpdateSlave() {
 	for _, packet := range slave.linker.GetPacket() {
 		switch packet.GetId() {
 		case PACKET_SLAVEINFO:
-			fmt.Println("received slave info")
 			slave.readSlaveData(ReadPacketSlaveInfo(packet))
 		case PACKET_REQUESTFILE:
 			slave.handleSlaveFileRequest(ReadPacketRequestFile(packet))
-		case PACKET_SLAVEREADY:
-			slave.handleSlaveReady(ReadPacketSlaveReady(packet))
 		}
 	}
 }
@@ -52,7 +48,10 @@ func (slave *slaveData) AssignSlaveToProject(project *projectData) {
 }
 
 func (slave *slaveData) readSlaveData(packet *PacketSlaveInfo) {
+	mainLog.LogMsg(logger.LOG_LOW, "PROJECT", "SLAVE UPDATE INFO", packet.SlaveName)
 	slave.slaveName = packet.SlaveName
+	slave.projectReady = packet.ProjectReady
+	slave.available = packet.Availlable
 }
 
 func (slave *slaveData) handleSlaveFileRequest(packet *PacketRequestFile) {
@@ -63,26 +62,28 @@ func (slave *slaveData) handleSlaveFileRequest(packet *PacketRequestFile) {
 		if !file.IsExterne {
 			filepacket.Filepath = filepath.Join(rmrfarm.conf.MayaWorkspace, file.Path, file.File)
 		} else {
+
 			filepacket.Filepath = filepath.Join(file.Path, file.File)
 		}
+		filepacket.IsExterne = file.IsExterne
 		filepacket.FileName = file.File
 		filepacket.Path = file.Path
 		slave.linker.SendPacket(filepacket)
 	}
 }
 
-func (slave *slaveData) handleSlaveReady(packet *PacketSlaveReady) {
-	mainLog.LogMsg(logger.LOG_INFO, "PROJECT", "Received Slave Readyness")
-	slave.projectReady = packet.ProjectName
-	slave.available = packet.Availlable
-}
-
 func (slave *slaveData) SendPacket(packet Packet) {
 	slave.linker.SendPacket(packet)
 }
 
-func (slave *slaveData) StartRenderFrame(projectName string, cameraName string, frameId int32){
-	slave.linker.SendPacket(&PacketRenderFrame{PacketData{PACKET_RENDERFRAME, nil}, projectName, cameraName, frameId})
+func (slave *slaveData) StartRenderFrame(project *projectData, frame *frame){
+	packet := &PacketRenderFrame{}
+	packet.ProjectName = project.ProjectName
+	packet.Camera = project.Camera[project.cameraToRender]
+	packet.FrameId = frame.frameId
+	frame.renderedBy = slave.slaveName
+	frame.state = FRAMESTATE_RENDERING
+	slave.linker.SendPacket(packet)
 }
 
 func (slave *slaveData) printSlaveInfo(){

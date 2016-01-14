@@ -25,7 +25,6 @@ const (
 type projectData struct {
 	projectName string
 	fileList    []FileData
-	mainClient  linker.Client
 	client      linker.Client
 	state       int8
 }
@@ -35,21 +34,14 @@ func newProject(data *PacketNewProject, client linker.Client) *projectData {
 	projectData := &projectData{}
 	projectData.projectName = data.ProjectName
 	projectData.fileList = data.FileData
-	projectData.mainClient = data.Client
 	projectData.client = client
+	projectData.state = STATE_WAITINGFILE
 	projectData.DecompressProjectDataFile(data.Filepath)
+	projectData.CompatibiliseRIB()
 	return projectData
 }
 
-func (pd *projectData) generateProject(){
-
-	pd.checkAndRequestRequiredFile()
-	os.MkdirAll(filepath.Join(rmrfarm.conf.Workspace, "/renderman/", pd.projectName, "images"), os.ModePerm)
-}
-
 func (pd *projectData) DecompressProjectDataFile(largefilepath string) {
-	//err := os.MkdirAll(filepath.Join(rmrfarm.conf.Workspace, filepath, os.ModePerm)
-
 	r, err := zip.OpenReader(largefilepath)
 	if err != nil {
 
@@ -75,22 +67,28 @@ func (pd *projectData) DecompressProjectDataFile(largefilepath string) {
 func (pd *projectData) changeState(state int8) {
 	pd.state = state
 	if pd.state == STATE_READY {
-		rmrfarm.projectManager.UpdateSlaveReadyness()
+		rmrfarm.masterHandler.SendSlaveInfo()
 	}
 }
 
 func (pd *projectData) updateProject() {
-
+	if pd.state == STATE_WAITINGFILE{
+		pd.checkAndRequestRequiredFile()
+	}
 }
 
 func (pd *projectData) startRender(camera string, frameId int32) {
+	os.MkdirAll(filepath.Join(rmrfarm.conf.Workspace, "/renderman/", pd.projectName, "images"), os.ModePerm)
 	mainLog.SetColor(logger.TEXT_BLINK, logger.TEXT_BOLD,logger.COLOR_RED).LogMsg(logger.LOG_INFO,"RENDER","STARTING RENDERING !")
+	mainLog.SetColor(logger.TEXT_BLINK, logger.TEXT_BOLD,logger.COLOR_RED).LogMsg(logger.LOG_INFO,"RENDER","using cwd :",  rmrfarm.conf.Workspace)
 	cmd := exec.Command("prman","-Progress",  "-cwd", rmrfarm.conf.Workspace,
 		filepath.Join("renderman",pd.projectName,"/rib/000" + strconv.Itoa(int(frameId))+ "/"+camera + "Shape_Final.000"+strconv.Itoa(int(frameId))+".rib"))
+	cmd.Env = os.Environ()
+	cmd.Env = append(cmd.Env, "RMSPROJ="+rmrfarm.conf.Workspace)
 	stdout, err := cmd.StdoutPipe()
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
-
+			//prman -cwd C:\Users\epixe\Desktop\GoServer renderman/Andie_Furv2/rib/job/0003/perspShape_Final.0003.rib
 	}
 	if err := cmd.Start(); err != nil {
 
@@ -120,45 +118,31 @@ func (pd *projectData) checkAndRequestRequiredFile() {
 		for _, f := range fileData{
 			mainLog.SetColor(logger.COLOR_GREEN).LogMsg(logger.LOG_INFO, "PROJECT", filepath.Join(f.Path, f.File), "NOT EXISTING, ADDING TO REQUEST")
 		}
-		pd.client.GetConn().SendPacket(&PacketRequestFile{PacketData{PACKET_REQUESTFILE, pd.mainClient}, fileData})
+		rmrfarm.masterHandler.linker.SendPacket(&PacketRequestFile{PacketData{PACKET_REQUESTFILE, pd.client}, fileData})
 	} else {
 		mainLog.SetColor(logger.COLOR_GREEN).LogMsg(logger.LOG_INFO, "PROJECT", "EVERY FILE HAVE BEEN RECEIVED")
 		pd.changeState(STATE_READY)
-		pd.MakeCurrentPCCompatibleRIB()
 	}
 }
 
 func (pd *projectData) checkRequiredFile() []FileData {
 	var fileToRequest []FileData
-	for _, file := range pd.fileList {
-		if _, err := os.Stat(filepath.Join(rmrfarm.conf.Workspace, strings.Replace(file.Path, ":", "_", -1), file.File)); os.IsNotExist(err) {
-			mainLog.SetColor(logger.COLOR_GREEN).LogMsg(logger.LOG_INFO, "PROJECT", "Required file check :", file.File)
-			fileToRequest = append(fileToRequest, file)
+	for id, file := range pd.fileList {
+		if !file.IsRequested {
+			if _, err := os.Stat(filepath.Join(rmrfarm.conf.Workspace, strings.Replace(file.Path, ":", "_", -1), file.File)); os.IsNotExist(err) {
+				mainLog.SetColor(logger.COLOR_GREEN).LogMsg(logger.LOG_INFO, "PROJECT", "REQUIRED FILE ADDED TO REQUEST :", file.File)
+				fileToRequest = append(fileToRequest, file)
+				pd.fileList[id].IsRequested = true
+			}
 		}
 	}
 	return fileToRequest
 }
 
-func (pd *projectData) HandleSendFile(packet *PacketSendFile) {
-	err := os.MkdirAll(filepath.Join(rmrfarm.conf.Workspace, strings.Replace(packet.Path, ":", "_", -1)), os.ModePerm)
-	if err != nil {
-		mainLog.SetColor(logger.COLOR_RED).LogErr(logger.LOG_INFO, "PROJECT", "Could'nt not create directory :", err)
-	}
-	err = os.Rename(packet.Filepath, filepath.Join(rmrfarm.conf.Workspace, strings.Replace(packet.Path, ":", "_", -1), packet.FileName))
-	if err != nil {
-		mainLog.SetColor(logger.COLOR_RED).LogErr(logger.LOG_INFO, "PROJECT", "Couldn't Move Temp File", err)
-	}
-	mainLog.SetColor(logger.COLOR_GREEN).LogMsg(logger.LOG_INFO, "PROJECT", "FILE ",filepath.Join(rmrfarm.conf.Workspace, strings.Replace(packet.Path, ":", "_", -1), packet.FileName), "Have Been Received")
-	fileData := pd.checkRequiredFile()
-	if len(fileData) == 0 {
-		mainLog.SetColor(logger.COLOR_GREEN).LogMsg(logger.LOG_INFO, "PROJECT", "EVERY FILE HAVE BEEN RECEIVED")
-		pd.changeState(STATE_READY)
-		pd.MakeCurrentPCCompatibleRIB()
-	}
-}
-
-func (pd *projectData) MakeCurrentPCCompatibleRIB(){
+func (pd *projectData) CompatibiliseRIB(){
+	mainLog.SetColor(logger.COLOR_BLUE).LogMsg(logger.LOG_INFO, "PROJECT", "CONVERTING RIB PATH FOR COMPATIBILITY WITH THIS PC")
 	filepath.Walk(filepath.Join(rmrfarm.conf.Workspace, "renderman", pd.projectName), pd.replaceAbsPath)
+	mainLog.SetColor(logger.COLOR_BLUE).LogMsg(logger.LOG_INFO, "PROJECT", "COMPLETED")
 }
 
 

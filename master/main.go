@@ -35,7 +35,7 @@ func exitHandler() {
 }
 
 func main() {
-	mainLog = logger.NewLogger(logger.LOG_HIGH)
+	mainLog = logger.NewLogger(logger.LOG_LOW)
 	rmrfarm.conf = loadConfiguration()
 	rmrfarm.slaveManager = newSlaveManager()
 	rmrfarm.projectManager = startProjectManager()

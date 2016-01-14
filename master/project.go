@@ -8,7 +8,6 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
-	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -42,11 +41,10 @@ func newProject(projectName string) *projectData {
 func (pd *projectData) updateProject(){
 	if pd.State == PROJECT_STATE_RENDER{
 		if slave := rmrfarm.slaveManager.getSlaveReadyForProject(pd.ProjectName); slave != nil{
-			if frame := pd.FrameManager.RenderFrame(); frame != nil {
+			if frame := pd.FrameManager.GetFrameToRender(); frame != nil {
 				mainLog.LogMsg(logger.LOG_INFO, "PROJECT", "Rendering frame", frame.frameId)
-				slave.StartRenderFrame(pd.ProjectName, pd.Camera[pd.cameraToRender], frame.frameId)
+				slave.StartRenderFrame(pd, frame)
 			}else{
-				mainLog.LogMsg(logger.LOG_INFO, "PROJECT", "No Frame to Render")
 			}
 		}
 	}
@@ -88,7 +86,7 @@ func (pd *projectData) generateProject() {
 				}
 				files, _ := ioutil.ReadDir(filepath.Join(rmrfarm.conf.MayaWorkspace, "/renderman/", pd.ProjectName, dir.Name(), frame.Name()))
 				for _, file := range files {
-					if !strings.HasSuffix(file.Name(), ".rib") {
+					if !strings.HasSuffix(file.Name(), ".rib") && !strings.HasSuffix(file.Name(), ".rlf"){
 						continue
 					}
 					if strings.Contains(file.Name(), "Shape"){
@@ -171,12 +169,13 @@ func (pd *projectData) addUniqueLink(link FileData) {
 	}
 	if !exist {
 		var err error
-		if !link.IsExterne {
+		if link.IsExterne {
 			_, err = os.Stat(filepath.Join(link.Path, link.File))
 		} else {
 			_, err = os.Stat(filepath.Join(rmrfarm.conf.MayaWorkspace, link.Path, link.File))
 		}
 		if os.IsNotExist(err) {
+			mainLog.SetColor(logger.BACKGROUND_RED).LogMsg(logger.LOG_INFO, "DEBUG", err)
 			return
 		}
 		pd.FileData = append(pd.FileData, link)
@@ -189,13 +188,13 @@ func (pd *projectData) extractRibLink(content string) []FileData {
 	var linkArray []FileData
 	for _, found := range regex.FindAllStringSubmatch(string(content), -1) {
 		quoted := found[0]
-		if f, err := os.Stat(quoted); !os.IsNotExist(err) && !f.IsDir() {
-			fileData := FileData{path.Base(quoted), path.Dir(quoted), true}
+		if f, err := os.Stat(quoted); !os.IsNotExist(err) && !f.IsDir() && filepath.IsAbs(quoted){
+			fileData := FileData{filepath.Base(quoted), filepath.Dir(quoted), true, false}
 			pd.addUniqueLink(fileData)
 		} else if strings.Index(quoted, "/") != -1 && strings.Index(quoted, "@") == -1 && strings.Index(quoted, ":") == -1 {
 			if !strings.HasSuffix(quoted, "/") {
-				if strings.Index(quoted, "ribarchive") != -1 || strings.Index(quoted, "textures") != -1 {
-					fileData := FileData{path.Base(quoted), path.Dir(quoted), false}
+				if strings.Index(quoted, "renderman") == 0 && (strings.Index(quoted, "ribarchive") != -1 || strings.Index(quoted, "textures") != -1) {
+					fileData := FileData{filepath.Base(quoted), filepath.Dir(quoted), false, false}
 					pd.addUniqueLink(fileData)
 				}
 			}

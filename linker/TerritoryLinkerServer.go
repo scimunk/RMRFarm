@@ -16,6 +16,7 @@ type ServerLinker struct {
 	address       string
 	clientIdPool  int32
 	packetOut     chan Packet
+	packetOutAll     chan Packet
 	packetIn      chan Packet
 	logger logger.Logger
 	clienthandler chan LinkerClientHandler
@@ -67,8 +68,13 @@ func (linker *ServerLinker) SendPacket(packet Packet) {
 	linker.packetOut <- packet
 }
 
+//function used to send a packet to the client specified in packet data
+func (linker *ServerLinker) SendPacketToAll(packet Packet) {
+	linker.packetOut <- packet
+}
+
 func StartServerLinker(address string) *ServerLinker {
-	linker := &ServerLinker{address, 0, make(chan Packet, 100), make(chan Packet, 100),nil, make(chan LinkerClientHandler, 100)}
+	linker := &ServerLinker{address, 0, make(chan Packet, 100), make(chan Packet, 100), make(chan Packet, 100),nil, make(chan LinkerClientHandler, 100)}
 	go linker.HandleLinker()
 	return linker
 }
@@ -106,7 +112,6 @@ func (linker *ServerLinker) HandleLinker() {
 			default:
 				break
 			}
-
 		}
 	}
 }
@@ -140,7 +145,6 @@ func (client *linkerClient) handleConnection(clientchannel chan LinkerClientHand
 		client.clientConn.Read(buffer)
 		buffer = make([]byte, binary.BigEndian.Uint16(buffer))
 		_, err := client.clientConn.Read(buffer)
-		fmt.Println("full data :", buffer)
 		if err != nil {
 			return
 		}

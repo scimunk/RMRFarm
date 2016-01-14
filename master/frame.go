@@ -9,5 +9,6 @@ const (
 
 type frame struct {
 	frameId int32 `yaml:"frameId"`
+	renderedBy string `yaml:"renderedBy"`
 	state   int8 `yaml:"state"`
 }
