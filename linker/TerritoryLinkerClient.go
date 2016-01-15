@@ -94,18 +94,23 @@ func readPacket(linker *LinkerData, conn net.Conn) {
 		_, err := conn.Read(buffer)
 		if err != nil {
 			linker.isConnected = false
+			fmt.Println("error with connection", err)
 			return
 		}
+		fmt.Println(buffer)
 		if buffer[0] >= 1 {
 			size := binary.BigEndian.Uint32(buffer[1:5])
 			logMsg(linker.logger, logger.LOG_LOW, "LINKER", "receiving large packet size :", size)
 			fmt.Println("receiving packet of size : ", size)
-			f, _ := ioutil.TempFile("", "largePacket")
-			_, err := io.CopyN(f, conn,int64(size))
+			f, err := ioutil.TempFile("", "largePacket")
+			if err != nil{
+				fmt.Println("err copy:", err)
+			}
+			_, err = io.CopyN(f, conn,int64(size))
 			if err != nil{
 				logErr(linker.logger, logger.LOG_HIGH,"LINKER", "large packet error" ,err)
 			}
-			packet = &linkerLargePacketData{linkerPacketData{buffer[1], buffer[2:len(buffer)], nil},f.Name()}
+			packet = &linkerLargePacketData{linkerPacketData{buffer[5], buffer[6:len(buffer)], nil},f.Name()}
 			linker.packetIn <- packet
 			f.Close()
 			logMsg(linker.logger, logger.LOG_LOW, "LINKER", "large packet received")

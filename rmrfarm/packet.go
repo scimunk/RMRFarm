@@ -10,6 +10,7 @@ const (
 	PACKET_REQUESTFILE
 	PACKET_SENDFILE
 	PACKET_RENDERFRAME
+	PACKET_FRAMECOMPLETED
 )
 
 /*
@@ -216,4 +217,36 @@ func (p *PacketRenderFrame) GetBytes() []byte {
 
 func (p *PacketRenderFrame) GetId() byte {
 	return PACKET_RENDERFRAME
+}
+
+
+/*
+	Packet FrameCompleted
+*/
+type PacketFrameCompleted struct {
+	LargePacketData
+	ProjectName string
+	FrameId int32
+}
+
+func ReadPacketFrameCompleted(packet linker.LargePacket) *PacketFrameCompleted {
+	reader := CreateBinaryReader(packet.GetBytes())
+	newpacket := &PacketFrameCompleted{}
+	newpacket.Filepath = packet.GetFilePath()
+	newpacket.PacketId = packet.GetId()
+
+	newpacket.ProjectName = reader.ReadUtfString()
+	newpacket.FrameId = reader.ReadInt32()
+	return newpacket
+}
+
+func (p *PacketFrameCompleted) GetBytes() []byte {
+	writer := CreateBinaryWriter()
+	writer.WriteUtfString(p.ProjectName)
+	writer.WriteInt32(p.FrameId)
+	return writer.Bytes()
+}
+
+func (p *PacketFrameCompleted) GetId() byte {
+	return PACKET_FRAMECOMPLETED
 }

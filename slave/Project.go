@@ -79,11 +79,11 @@ func (pd *projectData) updateProject() {
 
 func (pd *projectData) startRender(camera string, frameId int32) {
 	os.MkdirAll(filepath.Join(rmrfarm.conf.Workspace, "/renderman/", pd.projectName, "images"), os.ModePerm)
-	mainLog.SetColor(logger.TEXT_BLINK, logger.TEXT_BOLD,logger.COLOR_RED).LogMsg(logger.LOG_INFO,"RENDER","STARTING RENDERING !")
-	mainLog.SetColor(logger.TEXT_BLINK, logger.TEXT_BOLD,logger.COLOR_RED).LogMsg(logger.LOG_INFO,"RENDER","using cwd :",  rmrfarm.conf.Workspace)
+	mainLog.SetColor(logger.COLOR_RED).LogMsg(logger.LOG_INFO,"RENDER","STARTING RENDERING !")
 	cmd := exec.Command("prman","-Progress",  "-cwd", rmrfarm.conf.Workspace,
 		filepath.Join("renderman",pd.projectName,"/rib/000" + strconv.Itoa(int(frameId))+ "/"+camera + "Shape_Final.000"+strconv.Itoa(int(frameId))+".rib"))
 	cmd.Env = os.Environ()
+	cmd.Env = append(cmd.Env, "RMSPROJ_FROM_ENV="+rmrfarm.conf.Workspace)
 	cmd.Env = append(cmd.Env, "RMSPROJ="+rmrfarm.conf.Workspace)
 	stdout, err := cmd.StdoutPipe()
 	stderr, err := cmd.StderrPipe()
@@ -93,8 +93,8 @@ func (pd *projectData) startRender(camera string, frameId int32) {
 	if err := cmd.Start(); err != nil {
 
 	}
+	go pd.frameReader(stderr,frameId)
 	go reader(stdout)
-	go reader(stderr)
 	if err := cmd.Wait(); err != nil {
 
 	}
@@ -108,6 +108,46 @@ func reader(io io.ReadCloser) {
 			break
 		}
 		mainLog.SetColor(logger.COLOR_BLUE).LogMsg(logger.LOG_INFO, "RENDER", string(str))
+	}
+}
+
+func (pd *projectData) frameReader(io io.ReadCloser, frameid int32){
+	completed := false
+	for {
+		reader := bufio.NewReader(io)
+		str, err := reader.ReadBytes('\n')
+		if err != nil {
+			break
+		}
+		mainLog.SetColor(logger.COLOR_BLUE).LogMsg(logger.LOG_INFO, "RENDER", string(str))
+		if strings.Contains(string(str), "100%"){
+			completed = true
+			mainLog.LogMsg(logger.LOG_INFO, "RENDER", "RENDER COMPLETED")
+			break
+		}
+	}
+	if completed{
+		pd.state = STATE_READY
+		packet := &PacketFrameCompleted{LargePacketData:LargePacketData{PacketData: PacketData{PACKET_FRAMECOMPLETED, pd.client}}}
+		packet.ProjectName = pd.projectName
+		packet.FrameId = frameid
+		var path string
+		files, _ := ioutil.ReadDir(filepath.Join(rmrfarm.conf.Workspace, "/renderman/", pd.projectName, "images"))
+while1:
+		for _, file := range files{
+			spl := strings.Split(file.Name(), ".")
+			for _, substr := range spl {
+				if i, err := strconv.Atoi(substr); err == nil && int32(i) == frameid{
+					path = filepath.Join(rmrfarm.conf.Workspace, "/renderman/", pd.projectName, "images", file.Name())
+					break while1
+				}
+			}
+		}
+
+		mainLog.LogMsg(logger.LOG_INFO, "RENDER","frame rendered  :", path)
+		packet.Filepath = path
+		rmrfarm.masterHandler.linker.SendPacket(packet)
+		pd.changeState(STATE_READY)
 	}
 }
 

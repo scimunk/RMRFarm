@@ -65,7 +65,7 @@ func commandProject(cmd []string) {
 			rmrfarm.projectManager.newProjectId(id-1)
 		}
 	case "start":
-		mainLog.SetColor(logger.COLOR_YELLOW).LogMsg(logger.LOG_INFO, "PROJECT", "Choose Project to start :")
+		mainLog.SetColor(logger.COLOR_CYAN).LogMsg(logger.LOG_INFO, "PROJECT", "Choose Project to start :")
 		i := 0
 		for _, project := range rmrfarm.projectManager.getGeneratedProject() {
 			mainLog.SetColor(logger.COLOR_GREEN).LogMsg(logger.LOG_INFO,"PROJECT", strconv.Itoa(i)+ ") "+project)

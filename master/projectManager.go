@@ -57,9 +57,9 @@ func (pm *projectManager) getGeneratedProject() []string{
 }
 
 func (pm *projectManager) saveProject() {
-	mainLog.SetColor(logger.COLOR_GREEN).LogMsg(logger.LOG_INFO, "PROJECTMANAGER", "SAVING PROJECT DATA")
+	/*mainLog.SetColor(logger.COLOR_GREEN).LogMsg(logger.LOG_INFO, "PROJECTMANAGER", "SAVING PROJECT DATA")
 	data, err := yaml.Marshal(pm)
 	ioutil.WriteFile("project.cfg", data, 0644)
 	check(err)
-	mainLog.SetColor(logger.COLOR_GREEN).LogMsg(logger.LOG_INFO, "PROJECTMANAGER", "SAVED!")
+	mainLog.SetColor(logger.COLOR_GREEN).LogMsg(logger.LOG_INFO, "PROJECTMANAGER", "SAVED!")*/
 }

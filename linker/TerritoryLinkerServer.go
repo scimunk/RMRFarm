@@ -163,7 +163,7 @@ func (client *linkerClient) handleConnection(clientchannel chan LinkerClientHand
 			packet = &linkerLargePacketData{linkerPacketData{buffer[5], buffer[6:len(buffer)], client},f.Name()}
 			packetIn <- packet
 			f.Close()
-			logMsg(client.servRef.logger, logger.LOG_LOW, "LINKER", "Large Packet SuccessFully Received")
+			logMsg(client.servRef.logger, logger.LOG_LOW, "LINKER", "Large Packet SuccessFully Received", f.Name())
 		}else {
 			packet = &linkerPacketData{buffer[1], buffer[2:len(buffer)], client}
 			packetIn <- packet

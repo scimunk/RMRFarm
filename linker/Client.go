@@ -52,9 +52,15 @@ func (client linkerClient) SendPacket(packet Packet) {
 	data = append(data, packet.GetBytes()...)
 	client.clientConn.Write(data)
 	if isLargePacket{
-		f, _ := os.Open(largePacket.GetFilePath())
+		f, err := os.Open(largePacket.GetFilePath())
+		if err != nil {
+			fmt.Println("open error", err)
+		}
 		fmt.Println("Sending Large File")
-		io.Copy(client.clientConn, f)
+		_, err = io.Copy(client.clientConn, f)
+		if err != nil {
+			fmt.Println("open error", err)
+		}
 		f.Close()
 		client.clientConn.Write([]byte{})
 		fmt.Println("Completed")

@@ -51,10 +51,10 @@ func (pd *projectData) updateProject(){
 }
 
 func (pd *projectData) startRenderProject() {
+	mainLog.SetColor(logger.COLOR_CYAN).LogMsg(logger.LOG_INFO, "PROJECT", "Select the camera you want to render :")
 	for id, camera := range pd.Camera{
-		mainLog.LogMsg(logger.LOG_INFO, "PROJECT", id, ")", camera)
+		mainLog.SetColor(logger.COLOR_GREEN).LogMsg(logger.LOG_INFO, "PROJECT", id, ")", camera)
 	}
-	mainLog.LogMsg(logger.LOG_INFO, "PROJECT", "Select the camera you want to render :")
 	cmd := readCmd()
 	if id, err := strconv.Atoi(cmd[0]); id >= 0 && id < len(pd.Camera) && err == nil {
 		mainLog.LogMsg(logger.LOG_INFO, "PROJECT", "Starting Rendering of camera", pd.Camera[id])
@@ -201,4 +201,17 @@ func (pd *projectData) extractRibLink(content string) []FileData {
 		}
 	}
 	return linkArray
+}
+
+func (pd *projectData) handleFrameCompleted(packet *PacketFrameCompleted){
+	err := os.MkdirAll(filepath.Join(rmrfarm.conf.MayaWorkspace, "RMRFarm", pd.ProjectName), os.ModePerm)
+	if err != nil {
+		mainLog.SetColor(logger.COLOR_RED).LogErr(logger.LOG_INFO, "PROJECT", "Could'nt not create directory :", err)
+	}
+	err = os.Rename(packet.Filepath, filepath.Join(rmrfarm.conf.MayaWorkspace, "RMRFarm", pd.ProjectName, strconv.Itoa(int(packet.FrameId)) + ".exr"))
+	if err != nil {
+		mainLog.SetColor(logger.COLOR_RED).LogErr(logger.LOG_INFO, "PROJECT", "Couldn't Move Temp File", err)
+	}
+	mainLog.SetColor(logger.COLOR_GREEN).LogMsg(logger.LOG_INFO, "PROJECT", "FRAME RECEIVED ",
+		filepath.Join(rmrfarm.conf.MayaWorkspace, "RMRFarm", pd.ProjectName, strconv.Itoa(int(packet.FrameId)) + ".exr"))
 }

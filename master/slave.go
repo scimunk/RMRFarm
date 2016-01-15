@@ -33,6 +33,8 @@ func (slave *slaveData) UpdateSlave() {
 			slave.readSlaveData(ReadPacketSlaveInfo(packet))
 		case PACKET_REQUESTFILE:
 			slave.handleSlaveFileRequest(ReadPacketRequestFile(packet))
+		case PACKET_FRAMECOMPLETED:
+			slave.handleFrameCompleted( ReadPacketFrameCompleted(packet.(LargePacket)))
 		}
 	}
 }
@@ -83,7 +85,12 @@ func (slave *slaveData) StartRenderFrame(project *projectData, frame *frame){
 	packet.FrameId = frame.frameId
 	frame.renderedBy = slave.slaveName
 	frame.state = FRAMESTATE_RENDERING
+	slave.available = false
 	slave.linker.SendPacket(packet)
+}
+
+func (slave *slaveData) handleFrameCompleted(packet *PacketFrameCompleted){
+	slave.project.handleFrameCompleted(packet)
 }
 
 func (slave *slaveData) printSlaveInfo(){
