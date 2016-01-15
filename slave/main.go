@@ -21,7 +21,7 @@ type RMRFarm struct {
 }
 
 func main() {
-	mainLog = logger.NewLogger(logger.LOG_LOW)
+	mainLog = logger.NewLogger(logger.LOG_HIGH)
 	rmrfarm.conf = loadConfiguration()
 	rmrfarm.masterHandler = newMasterHandler()
 	rmrfarm.masterHandler.updateMasterHandler()

@@ -106,7 +106,7 @@ func commandStats(cmd []string) {
 		return
 	}
 	switch cmd[0] {
-	case "help":
+		default:
 		mainLog.SetColor(logger.COLOR_YELLOW).LogMsg(logger.LOG_INFO,"HELP",len(rmrfarm.slaveManager.slaveData) , " RenderSlave are availlable for rendering")
 	}
 }

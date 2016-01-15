@@ -90,6 +90,7 @@ func readPacket(linker *LinkerData, conn net.Conn) {
 	for true {
 		buffer := make([]byte, 2)
 		conn.Read(buffer)
+		fmt.Println("receiving packet of size", buffer)
 		buffer = make([]byte, binary.BigEndian.Uint16(buffer))
 		_, err := conn.Read(buffer)
 		if err != nil {

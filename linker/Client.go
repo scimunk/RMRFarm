@@ -36,6 +36,7 @@ func (client linkerClient) SendPacket(packet Packet) {
 	data := make([]byte, headersize)
 	data[0] = uint8(length >> 8)
 	data[1] = uint8(length & 0xff)
+	fmt.Println("sending packet of size", data[0:2])
 	data[2] = 0
 	if isLargePacket {
 		f, err := os.Stat(largePacket.GetFilePath())
@@ -56,8 +57,10 @@ func (client linkerClient) SendPacket(packet Packet) {
 		if err != nil {
 			fmt.Println("open error", err)
 		}
-		fmt.Println("Sending Large File")
-		_, err = io.Copy(client.clientConn, f)
+		size, _ := f.Stat()
+		fmt.Println("Sending Large File of size ", size.Size())
+		n, err := io.CopyN(client.clientConn, f, size.Size())
+		fmt.Println("sended :", n)
 		if err != nil {
 			fmt.Println("open error", err)
 		}

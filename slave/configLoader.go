@@ -31,7 +31,7 @@ func createConf() *config {
 	config := &config{}
 
 	config.Workspace = getInput("Define slave workspace path :", exists)
-	config.SlaveName = getInput("Define slave Name :", exists)
+	config.SlaveName = getInput("Define slave Name :", isString)
 	config.Ip = getInput("define Slave IP :", checkIp)
 
 	fmt.Println("Writing configuration")
@@ -66,9 +66,13 @@ func checkIp(ip string) error {
 }
 
 func exists(path string) error {
-	_, err := os.Stat(filepath.Clean(path))
+	err := os.MkdirAll(filepath.Clean(path), os.ModePerm)
 	if err != nil {
 		return err
 	}
+	return nil
+}
+
+func isString(str string) error{
 	return nil
 }
