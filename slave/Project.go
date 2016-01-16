@@ -77,11 +77,38 @@ func (pd *projectData) updateProject() {
 	}
 }
 
+func (pd *projectData) findPathToFrame(frameId int32) string{
+	pathToRib := filepath.Join(rmrfarm.conf.Workspace, "renderman", pd.projectName, "rib")
+	fileList, _ := ioutil.ReadDir(pathToRib)
+	for _, file := range fileList{
+		if n, err := strconv.Atoi(file.Name()); err == nil && int32(n) == frameId{
+			return filepath.Join(pathToRib, file.Name())
+		}
+	}
+	return ""
+}
+
+func (pd *projectData) findPathToMatchedCamera(path string, cameraName string) string{
+	fileList, _ := ioutil.ReadDir(path)
+	for _, file := range fileList{
+		if strings.Contains(file.Name(), cameraName){
+			return filepath.Join(path, file.Name())
+		}
+	}
+	return ""
+}
+
 func (pd *projectData) startRender(camera string, frameId int32) {
+	mainLog.SetColor(logger.COLOR_CYAN).LogMsg(logger.LOG_INFO,"RENDER","STARTING RENDERING FRAME", frameId, "WITH CAMERA", camera)
 	os.MkdirAll(filepath.Join(rmrfarm.conf.Workspace, "/renderman/", pd.projectName, "images"), os.ModePerm)
-	mainLog.SetColor(logger.COLOR_RED).LogMsg(logger.LOG_INFO,"RENDER","STARTING RENDERING !")
-	cmd := exec.Command("prman","-Progress",  "-cwd", rmrfarm.conf.Workspace,
-		filepath.Join("renderman",pd.projectName,"/rib/000" + strconv.Itoa(int(frameId))+ "/"+camera + "Shape_Final.000"+strconv.Itoa(int(frameId))+".rib"))
+
+	ribpath := pd.findPathToMatchedCamera(pd.findPathToFrame(frameId), camera)
+	if ribpath == ""{
+		mainLog.SetColor(logger.COLOR_RED).LogMsg(logger.LOG_INFO,"RENDER","Error while seeking the rib file")
+		return
+	}
+
+	cmd := exec.Command("prman","-Progress",  "-cwd", rmrfarm.conf.Workspace, ribpath)
 	cmd.Env = os.Environ()
 	cmd.Env = append(cmd.Env, "RMSPROJ_FROM_ENV="+rmrfarm.conf.Workspace)
 	cmd.Env = append(cmd.Env, "RMSPROJ="+rmrfarm.conf.Workspace)
@@ -107,7 +134,7 @@ func reader(io io.ReadCloser) {
 		if err != nil {
 			break
 		}
-		mainLog.SetColor(logger.COLOR_BLUE).LogMsg(logger.LOG_INFO, "RENDER", string(str))
+		mainLog.SetColor(logger.COLOR_LIGHTRED).LogMsg(logger.LOG_INFO, "RENDER", string(str))
 	}
 }
 
@@ -119,7 +146,7 @@ func (pd *projectData) frameReader(io io.ReadCloser, frameid int32){
 		if err != nil {
 			break
 		}
-		mainLog.SetColor(logger.COLOR_BLUE).LogMsg(logger.LOG_INFO, "RENDER", string(str))
+		mainLog.SetColor(logger.COLOR_RED).LogMsg(logger.LOG_INFO, "RENDER", string(str))
 		if strings.Contains(string(str), "100%"){
 			completed = true
 			mainLog.LogMsg(logger.LOG_INFO, "RENDER", "RENDER COMPLETED")
@@ -143,7 +170,6 @@ while1:
 				}
 			}
 		}
-
 		mainLog.LogMsg(logger.LOG_INFO, "RENDER","frame rendered  :", path)
 		packet.Filepath = path
 		rmrfarm.masterHandler.linker.SendPacket(packet)

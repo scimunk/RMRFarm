@@ -20,6 +20,7 @@ type ServerLinker struct {
 	packetIn      chan Packet
 	logger logger.Logger
 	clienthandler chan LinkerClientHandler
+	clientList map[int32]*linkerClient
 }
 
 type LinkerClientHandler struct {
@@ -70,11 +71,11 @@ func (linker *ServerLinker) SendPacket(packet Packet) {
 
 //function used to send a packet to the client specified in packet data
 func (linker *ServerLinker) SendPacketToAll(packet Packet) {
-	linker.packetOut <- packet
+	linker.packetOutAll <- packet
 }
 
 func StartServerLinker(address string) *ServerLinker {
-	linker := &ServerLinker{address, 0, make(chan Packet, 100), make(chan Packet, 100), make(chan Packet, 100),nil, make(chan LinkerClientHandler, 100)}
+	linker := &ServerLinker{address, 0, make(chan Packet, 100), make(chan Packet, 100), make(chan Packet, 100),nil, make(chan LinkerClientHandler, 100), make(map[int32]*linkerClient)}
 	go linker.HandleLinker()
 	return linker
 }
@@ -94,9 +95,7 @@ func (linker *ServerLinker) HandleLinker() {
 	var newclient LinkerClientHandler
 	var packet Packet
 	for true {
-
 		for i := 0; i < 10; i++ {
-
 			select {
 			case newclient = <-clientchannel:
 				linker.clienthandler <- newclient
@@ -108,7 +107,11 @@ func (linker *ServerLinker) HandleLinker() {
 		for i := 0; i < 50; i++ {
 			select {
 			case packet = <-linker.packetOut:
-				packet.GetClient().GetConn().SendPacket(packet)
+				packet.GetClient().sendPacket(packet)
+			case packet = <-linker.packetOutAll:
+				for _, client := range linker.clientList{
+					client.sendPacket(packet)
+				}
 			default:
 				break
 			}
@@ -122,9 +125,10 @@ func (linker *ServerLinker) connectionHandler(clientChannel chan LinkerClientHan
 		if err != nil {
 			continue
 		}
-		client := linkerClient{linker.getNewId(), linker, conn}
+		client := &linkerClient{linker.getNewId(), linker, conn}
+		linker.clientList[client.clientId] = client
 		go client.handleConnection(clientChannel, linker.packetIn)
-		fmt.Println("Receiving new Linker connection from port ", linker.address)
+		logMsg(client.servRef.logger.SetColor(logger.COLOR_BLUE), logger.LOG_MEDIUM, "LINKER", "NEW CONNECTION INCOMING FROM", linker.address)
 	}
 }
 

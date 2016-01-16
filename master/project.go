@@ -24,7 +24,6 @@ type projectData struct {
 	ProjectName   string        `yaml:"projectName"`
 	FileData      []FileData    `yaml:"fileList"`
 	FrameManager  *frameManager `yaml:"frameManager"`
-	AssignedSlave []string      `yaml:"assignedSlave"`
 	Camera []string `yaml:"CameraList"`
 	cameraToRender int
 	State int
@@ -42,9 +41,8 @@ func (pd *projectData) updateProject(){
 	if pd.State == PROJECT_STATE_RENDER{
 		if slave := rmrfarm.slaveManager.getSlaveReadyForProject(pd.ProjectName); slave != nil{
 			if frame := pd.FrameManager.GetFrameToRender(); frame != nil {
-				mainLog.LogMsg(logger.LOG_INFO, "PROJECT", "Rendering frame", frame.frameId)
 				slave.StartRenderFrame(pd, frame)
-			}else{
+				mainLog.SetColor(logger.COLOR_LIGHTGREEN).LogMsg(logger.LOG_INFO, "PROJECT", "Rendering frame : ", frame.frameId)
 			}
 		}
 	}
@@ -63,13 +61,7 @@ func (pd *projectData) startRenderProject() {
 	for _, slave := range rmrfarm.slaveManager.getAvaillableSlave(){
 		slave.AssignSlaveToProject(pd)
 	}
-	if len(pd.AssignedSlave) < 0 {
-		mainLog.LogWarn(0, "PROJECT", "No slave assigned to this project, use project slave assign [id] to assign slave eg: project slave assign 5 1 3")
-		return
-	}else{
-		pd.State = PROJECT_STATE_RENDER
-	}
-
+	pd.State = PROJECT_STATE_RENDER
 }
 
 func (pd *projectData) generateProject() {
@@ -93,7 +85,8 @@ func (pd *projectData) generateProject() {
 						pd.addCamera(file.Name()[:strings.Index(file.Name(),"Shape")])
 					}
 					content, _ := ioutil.ReadFile(filepath.Join(rmrfarm.conf.MayaWorkspace, "/renderman/", pd.ProjectName, dir.Name(), frame.Name(), file.Name()))
-					pd.extractRibLink(string(content))
+					fmt.Println("reading file", filepath.Join(rmrfarm.conf.MayaWorkspace, "/renderman/", pd.ProjectName, dir.Name(), frame.Name(), file.Name()))
+					pd.ExtractPath(string(content))
 				}
 			}
 		}
@@ -103,16 +96,13 @@ func (pd *projectData) generateProject() {
 }
 
 func (pd *projectData) addCamera(name string){
-	exist := false
 	for _, cam := range pd.Camera{
 		if cam == name{
-			exist = true
+			return
 		}
 	}
-	if !exist{
-		mainLog.SetColor(logger.COLOR_MAGENTA).LogMsg(logger.LOG_INFO, "PROJECT", "Added Camera", name)
-		pd.Camera = append(pd.Camera, name)
-	}
+	mainLog.SetColor(logger.COLOR_CYAN).LogMsg(logger.LOG_INFO, "PROJECT", "Added Camera :", name)
+	pd.Camera = append(pd.Camera, name)
 }
 
 type microCompress struct {
@@ -160,7 +150,33 @@ func (mc *microCompress) addToZip(path string, info os.FileInfo, err error) erro
 	return nil
 }
 
-func (pd *projectData) addUniqueLink(link FileData) {
+/*
+Extracting all path from the passed file content
+ */
+func (pd *projectData) ExtractPath(content string) []FileData {
+	regex, _ := regexp.Compile("(([A-Z]:\\/)?([a-zA-Z0-9_.\\-]+[\\/\\])+[a-zA-Z0-9_.\\-]*))")
+	var pathArray []FileData
+	for _, matchedRegex := range regex.FindAllStringSubmatch(string(content), -1) {
+		quoted := matchedRegex[0]
+		if f, err := os.Stat(quoted); !os.IsNotExist(err) && !f.IsDir() && filepath.IsAbs(quoted){
+			fileData := FileData{filepath.Base(quoted), filepath.Dir(quoted), true, false}
+			pd.RegisterPath(fileData)
+		} else if strings.Index(quoted, "/") != -1 && strings.Index(quoted, "@") == -1 && strings.Index(quoted, ":") == -1 {
+			if !strings.HasSuffix(quoted, "/") {
+				if strings.Index(quoted, "renderman") == 0 && (strings.Index(quoted, "ribarchive") != -1 || strings.Index(quoted, "textures") != -1) {
+					fileData := FileData{filepath.Base(quoted), filepath.Dir(quoted), false, false}
+					pd.RegisterPath(fileData)
+				}
+			}
+		}
+	}
+	return pathArray
+}
+
+/*
+We register the path in the fileData List, if it not exist
+ */
+func (pd *projectData) RegisterPath(link FileData) {
 	exist := false
 	for _, existingcheck := range pd.FileData {
 		if existingcheck.File == link.File {
@@ -181,26 +197,6 @@ func (pd *projectData) addUniqueLink(link FileData) {
 		pd.FileData = append(pd.FileData, link)
 		mainLog.SetColor(logger.COLOR_BLUE).LogMsg(logger.LOG_INFO, "PROJECT", "Register file", link.Path+link.File, "for remote ressource")
 	}
-}
-
-func (pd *projectData) extractRibLink(content string) []FileData {
-	regex, _ := regexp.Compile("(([A-Z]:\\/)?([a-zA-Z0-9_.\\-]+[\\/\\])+[a-zA-Z0-9_.\\-]*))")
-	var linkArray []FileData
-	for _, found := range regex.FindAllStringSubmatch(string(content), -1) {
-		quoted := found[0]
-		if f, err := os.Stat(quoted); !os.IsNotExist(err) && !f.IsDir() && filepath.IsAbs(quoted){
-			fileData := FileData{filepath.Base(quoted), filepath.Dir(quoted), true, false}
-			pd.addUniqueLink(fileData)
-		} else if strings.Index(quoted, "/") != -1 && strings.Index(quoted, "@") == -1 && strings.Index(quoted, ":") == -1 {
-			if !strings.HasSuffix(quoted, "/") {
-				if strings.Index(quoted, "renderman") == 0 && (strings.Index(quoted, "ribarchive") != -1 || strings.Index(quoted, "textures") != -1) {
-					fileData := FileData{filepath.Base(quoted), filepath.Dir(quoted), false, false}
-					pd.addUniqueLink(fileData)
-				}
-			}
-		}
-	}
-	return linkArray
 }
 
 func (pd *projectData) handleFrameCompleted(packet *PacketFrameCompleted){

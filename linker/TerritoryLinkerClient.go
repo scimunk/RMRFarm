@@ -70,7 +70,7 @@ func (linker *LinkerData) linkerOperation() {
 				for i := 0; i < 10000; i++ {
 					select {
 					case packet = <-linker.packetOut:
-						client.SendPacket(packet)
+						client.sendPacket(packet)
 					default:
 						break
 					}
@@ -87,22 +87,19 @@ func (linker *LinkerData) linkerOperation() {
 
 func readPacket(linker *LinkerData, conn net.Conn) {
 	var packet Packet
+	sizeBuffer := make([]byte, 2)
 	for true {
-		buffer := make([]byte, 2)
-		conn.Read(buffer)
-		fmt.Println("receiving packet of size", buffer)
-		buffer = make([]byte, binary.BigEndian.Uint16(buffer))
+		conn.Read(sizeBuffer)
+		buffer := make([]byte, binary.BigEndian.Uint16(sizeBuffer))
 		_, err := conn.Read(buffer)
 		if err != nil {
 			linker.isConnected = false
 			fmt.Println("error with connection", err)
 			return
 		}
-		fmt.Println(buffer)
 		if buffer[0] >= 1 {
 			size := binary.BigEndian.Uint32(buffer[1:5])
 			logMsg(linker.logger, logger.LOG_LOW, "LINKER", "receiving large packet size :", size)
-			fmt.Println("receiving packet of size : ", size)
 			f, err := ioutil.TempFile("", "largePacket")
 			if err != nil{
 				fmt.Println("err copy:", err)

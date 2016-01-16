@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	. "github.com/epixerion/RMRFarm/linker"
 	. "github.com/epixerion/RMRFarm/rmrfarm"
 )
@@ -48,7 +47,6 @@ func (mh *masterHandler) updateMasterHandler() {
 
 func (mh *masterHandler) SendSlaveInfo(){
 	packet := &PacketSlaveInfo{}
-	fmt.Println("sending slave info")
 	packet.SlaveName = rmrfarm.conf.SlaveName
 	packet.Availlable = rmrfarm.projectManager.projectHook == nil
 	for _, project := range rmrfarm.projectManager.projectList{
@@ -56,7 +54,5 @@ func (mh *masterHandler) SendSlaveInfo(){
 			packet.ProjectReady = append(packet.ProjectReady, project.projectName)
 		}
 	}
-	for _, client := range mh.clientList{
-		client.GetConn().SendPacket(packet)
-	}
+	mh.linker.SendPacketToAll(packet)
 }

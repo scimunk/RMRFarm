@@ -9,7 +9,7 @@ import (
 
 type Client interface{
 	GetId() int32
-	GetConn() *linkerClient
+	sendPacket(Packet)
 }
 
 type linkerClient struct {
@@ -22,11 +22,7 @@ func (linkerClient *linkerClient) GetId() int32{
 	return linkerClient.clientId
 }
 
-func (linkerClient *linkerClient) GetConn() *linkerClient{
-	return linkerClient
-}
-
-func (client linkerClient) SendPacket(packet Packet) {
+func (client *linkerClient) sendPacket(packet Packet) {
 	largePacket, isLargePacket := packet.(LargePacket)
 	headersize := 4
 	if isLargePacket{
@@ -36,7 +32,6 @@ func (client linkerClient) SendPacket(packet Packet) {
 	data := make([]byte, headersize)
 	data[0] = uint8(length >> 8)
 	data[1] = uint8(length & 0xff)
-	fmt.Println("sending packet of size", data[0:2])
 	data[2] = 0
 	if isLargePacket {
 		f, err := os.Stat(largePacket.GetFilePath())
@@ -58,14 +53,11 @@ func (client linkerClient) SendPacket(packet Packet) {
 			fmt.Println("open error", err)
 		}
 		size, _ := f.Stat()
-		fmt.Println("Sending Large File of size ", size.Size())
-		n, err := io.CopyN(client.clientConn, f, size.Size())
-		fmt.Println("sended :", n)
+		_, err = io.CopyN(client.clientConn, f, size.Size())
 		if err != nil {
 			fmt.Println("open error", err)
 		}
 		f.Close()
 		client.clientConn.Write([]byte{})
-		fmt.Println("Completed")
 	}
 }
